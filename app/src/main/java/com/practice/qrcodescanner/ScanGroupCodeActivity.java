@@ -14,42 +14,50 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 
-import com.google.android.gms.tasks.OnCompleteListener;
-import com.google.android.gms.tasks.Task;
 import com.google.android.gms.vision.CameraSource;
 import com.google.android.gms.vision.Detector;
 import com.google.android.gms.vision.barcode.Barcode;
 import com.google.android.gms.vision.barcode.BarcodeDetector;
-import com.google.firebase.auth.AuthResult;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.database.DataSnapshot;
+import com.google.firebase.database.DatabaseError;
+import com.google.firebase.database.DatabaseReference;
+import com.google.firebase.database.FirebaseDatabase;
+import com.google.firebase.database.ValueEventListener;
 
 import java.io.IOException;
-import java.util.Arrays;
+public class ScanGroupCodeActivity extends AppCompatActivity {
 
-public class ScanQRcodeActivity extends AppCompatActivity {
+    private FirebaseAuth mAuth;
+    private FirebaseUser user;
+    int count=0;
 
-    private static final String TAG = "ScanQRcodeActivity";
+    private static final String TAG = "ScanGroupCodeActivity";
     SurfaceView surfaceView;
-    //TextView txtBarcodeValue;
     private BarcodeDetector barcodeDetector;
+//
+    private DatabaseReference myRef;
+    private FirebaseDatabase firebaseDatabase;
+
     private CameraSource cameraSource;
     private static final int REQUEST_CAMERA_PERMISSION = 201;
-    private FirebaseAuth mAuth;
-    int count=0;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_scan_qrcode);
-        surfaceView = findViewById(R.id.surfaceView);// Initialize Firebase Auth
+        setContentView(R.layout.activity_scan_group_code);
+        surfaceView = findViewById(R.id.surfaceViewGroup);
         mAuth = FirebaseAuth.getInstance();
-
+        user = mAuth.getCurrentUser();
+        firebaseDatabase = FirebaseDatabase.getInstance();
+        myRef = firebaseDatabase.getReference("groups");
+//
     }
 
     private void initialiseDetectorsAndSources() {
 
-        Toast.makeText(getApplicationContext(), "Barcode scanner started", Toast.LENGTH_SHORT).show();
+        Toast.makeText(getApplicationContext(), "QR code scanner started", Toast.LENGTH_SHORT).show();
 
         barcodeDetector = new BarcodeDetector.Builder(this)
                 .setBarcodeFormats(Barcode.ALL_FORMATS)
@@ -64,10 +72,10 @@ public class ScanQRcodeActivity extends AppCompatActivity {
             @Override
             public void surfaceCreated(SurfaceHolder holder) {
                 try {
-                    if (ActivityCompat.checkSelfPermission(ScanQRcodeActivity.this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+                    if (ActivityCompat.checkSelfPermission(ScanGroupCodeActivity.this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
                         cameraSource.start(surfaceView.getHolder());
                     } else {
-                        ActivityCompat.requestPermissions(ScanQRcodeActivity.this, new
+                        ActivityCompat.requestPermissions(ScanGroupCodeActivity.this, new
                                 String[]{Manifest.permission.CAMERA}, REQUEST_CAMERA_PERMISSION);
                     }
 
@@ -92,7 +100,7 @@ public class ScanQRcodeActivity extends AppCompatActivity {
         barcodeDetector.setProcessor(new Detector.Processor<Barcode>() {
             @Override
             public void release() {
-                //Toast.makeText(getApplicationContext(), "To prevent memory leaks barcode scanner has been stopped", Toast.LENGTH_SHORT).show();
+                Toast.makeText(getApplicationContext(), "To prevent memory leaks barcode scanner has been stopped", Toast.LENGTH_SHORT).show();
             }
 
             @Override
@@ -100,14 +108,13 @@ public class ScanQRcodeActivity extends AppCompatActivity {
                 final SparseArray<Barcode> barcodes = detections.getDetectedItems();
                 if(count==0) {
                     if (barcodes.size() != 0) {
-                        //Authenticate the data first,
                         if (barcodes.valueAt(0) != null) {
                             count++;
-                            String[] data = barcodes.valueAt(0).displayValue.split("\n");
-                            Log.v(TAG, Arrays.toString(data));
-                            Log.v(TAG, "Email Id: " + data[0]);
-                            Log.v(TAG, "Password: " + data[1]);
-                            signIn(data[0], data[1]);
+                            Log.d(TAG, "Group:  " + barcodes.valueAt(0).displayValue);
+                            checkGroup(barcodes.valueAt(0).displayValue);
+                        /*Intent intent = new Intent(ScanGroupCodeActivity.this, QuestionsActivity.class);
+                        intent.putExtra("GROUP", barcodes.valueAt(0).displayValue);
+                        startActivity(intent);*/
                         }
                     }
                 }
@@ -115,39 +122,34 @@ public class ScanQRcodeActivity extends AppCompatActivity {
         });
     }
 
-    public void signIn(String email, String password){
-        mAuth.signInWithEmailAndPassword(email, password)
-                .addOnCompleteListener(this, new OnCompleteListener<AuthResult>() {
-                    @Override
-                    public void onComplete(@NonNull Task<AuthResult> task) {
-                        if (task.isSuccessful()) {
-                            // Sign in success, update UI with the signed-in user's information
-                            Log.d(TAG, "signInWithEmail:success");
-                            FirebaseUser user = mAuth.getCurrentUser();
-                            updateUI(user);
-                        } else {
-                            // If sign in fails, display a message to the user.
-                            Log.w(TAG, "signInWithEmail:failure", task.getException());
-                            runOnUiThread(new Runnable() {
-                                @Override
-                                public void run() {
-                                    Toast.makeText(ScanQRcodeActivity.this, "Authentication failed.", Toast.LENGTH_LONG).show();
-                                }
-                            });
-                            updateUI(null);
-                        }
+    private void checkGroup(final String groupName) {
+        myRef.addValueEventListener(new ValueEventListener() {
+            @Override
+            public void onDataChange(@NonNull DataSnapshot dataSnapshot) {
+                if (dataSnapshot.hasChild(groupName)) {
+                    if (dataSnapshot.child(groupName).hasChild(mAuth.getUid())){
+                        Toast.makeText(getApplicationContext(), "You have already evaluated this group!", Toast.LENGTH_LONG).show();
+                        Intent intent = new Intent(ScanGroupCodeActivity.this,HomeActivity.class);
+                        startActivity(intent);
+                        finish();
+                }else {
+                        Intent intent = new Intent(ScanGroupCodeActivity.this, QuestionsActivity.class);
+                        intent.putExtra("GROUP", groupName);
+                        startActivity(intent);
                     }
-                });
-    }
+                }else{
+                    Intent intent = new Intent(ScanGroupCodeActivity.this, QuestionsActivity.class);
+                    intent.putExtra("GROUP", groupName);
+                    startActivity(intent);
+                }
+            }
 
-    private void updateUI(FirebaseUser user) {
-        if (user!=null){
-            Intent intent = new Intent(ScanQRcodeActivity.this, HomeActivity.class);
-            intent.putExtra(MainActivity.USER, user);
-            startActivity(intent);
-        }
-    }
+            @Override
+            public void onCancelled(@NonNull DatabaseError databaseError) {
 
+            }
+        });
+    }
 
     @Override
     protected void onPause() {
@@ -176,7 +178,7 @@ public class ScanQRcodeActivity extends AppCompatActivity {
 
                 } else {
                     Toast.makeText(this, "Can not Scan the code. Grant the Permission", Toast.LENGTH_SHORT).show();
-                    startActivity(new Intent(ScanQRcodeActivity.this, MainActivity.class));
+                    startActivity(new Intent(ScanGroupCodeActivity.this, HomeActivity.class));
                 }
                 return;
             }
