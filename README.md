@@ -43,4 +43,5 @@ These instructions will get you a copy of the project up and running on your loc
 2. Open the project in Android Studio.
 3. SetUp Firebase and place google-services.json file under app folder.
 4. Generate QR code [here](https://www.qr-code-generator.com/) for groups(group id) and examiner(email and password (you can encrypt the data here instead)) 
+5. Create these users in Firebase Authentication.
 5. Run the application.
